@@ -1,3 +1,7 @@
+## 0.5.2
+
+* Upgrade `screen_retriever` to `0.2.2` for full Swift Package Manager support.
+
 ## 0.5.1
 
 * fix: Fix PrivacyInfo.xcprivacy warning for macOS Desktop on Mac M1 macOS 15 (Sequoia) (#550)
