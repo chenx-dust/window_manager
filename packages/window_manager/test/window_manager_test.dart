@@ -23,32 +23,54 @@ void main() {
   Future<void> emitEvent(String eventName) {
     return TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
-      channel.name,
-      codec.encodeMethodCall(
-        MethodCall('onEvent', <String, dynamic>{'eventName': eventName}),
-      ),
-      (_) {},
-    );
+          channel.name,
+          codec.encodeMethodCall(
+            MethodCall('onEvent', <String, dynamic>{'eventName': eventName}),
+          ),
+          (_) {},
+        );
   }
 
   setUp(() {
     calls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      channel,
-      (MethodCall methodCall) async {
-        calls.add(methodCall);
-        return null;
-      },
-    );
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+          calls.add(methodCall);
+          if (methodCall.method == 'isMinimized' ||
+              methodCall.method == 'isPositionSupported') {
+            return false;
+          }
+          return true;
+        });
   });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      channel,
-      null,
-    );
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('focus forwards a Linux activation timestamp', () async {
+    await windowManager.focus(activationTimestamp: 1234);
+
+    expect(calls.single.method, 'focus');
+    expect(calls.single.arguments, {'activationTimestamp': 1234});
+  });
+
+  test('show forwards a Linux activation timestamp', () async {
+    await windowManager.show(activationTimestamp: 1234);
+
+    expect(calls.map((call) => call.method), ['isMinimized', 'show']);
+    expect(calls.last.arguments, {
+      'inactive': false,
+      'activationTimestamp': 1234,
+    });
+  });
+
+  test('restore forwards a Linux activation timestamp', () async {
+    await windowManager.restore(activationTimestamp: 1234);
+
+    expect(calls.single.method, 'restore');
+    expect(calls.single.arguments, {'activationTimestamp': 1234});
   });
 
   test('setWindowCornerPreference passes the requested rounding', () async {
@@ -59,10 +81,10 @@ void main() {
       calls.map((call) => call.method),
       everyElement('setWindowCornerPreference'),
     );
-    expect(
-      calls.map((call) => (call.arguments as Map)['round']),
-      <bool>[true, false],
-    );
+    expect(calls.map((call) => (call.arguments as Map)['round']), <bool>[
+      true,
+      false,
+    ]);
   });
 
   test('the terminate event reaches a listener', () async {

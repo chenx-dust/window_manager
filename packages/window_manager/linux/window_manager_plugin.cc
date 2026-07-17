@@ -59,6 +59,33 @@ GdkWindow* get_gdk_window(WindowManagerPlugin* self) {
   return gtk_widget_get_window(GTK_WIDGET(get_window(self)));
 }
 
+static guint32 get_activation_timestamp(FlValue* args) {
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return GDK_CURRENT_TIME;
+  }
+
+  FlValue* value = fl_value_lookup_string(args, "activationTimestamp");
+  if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_INT) {
+    return GDK_CURRENT_TIME;
+  }
+
+  gint64 timestamp = fl_value_get_int(value);
+  if (timestamp <= 0 || timestamp > G_MAXUINT32) {
+    return GDK_CURRENT_TIME;
+  }
+  return static_cast<guint32>(timestamp);
+}
+
+static void present_window(WindowManagerPlugin* self, FlValue* args) {
+  GtkWindow* window = get_window(self);
+  guint32 timestamp = get_activation_timestamp(args);
+  if (timestamp == GDK_CURRENT_TIME) {
+    gtk_window_present(window);
+  } else {
+    gtk_window_present_with_time(window, timestamp);
+  }
+}
+
 static bool is_geometry_owned_by_wm(WindowManagerPlugin* self) {
   GtkWindow* window = get_window(self);
   if (window == nullptr)
@@ -145,8 +172,8 @@ static FlMethodResponse* set_prevent_close(WindowManagerPlugin* self,
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
-static FlMethodResponse* focus(WindowManagerPlugin* self) {
-  gtk_window_present(get_window(self));
+static FlMethodResponse* focus(WindowManagerPlugin* self, FlValue* args) {
+  present_window(self, args);
   g_autoptr(FlValue) result = fl_value_new_bool(true);
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
@@ -162,8 +189,18 @@ static FlMethodResponse* is_focused(WindowManagerPlugin* self) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
-static FlMethodResponse* show(WindowManagerPlugin* self) {
+static FlMethodResponse* show(WindowManagerPlugin* self, FlValue* args) {
   gtk_widget_show(GTK_WIDGET(get_window(self)));
+  FlValue* inactive_value =
+      args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP
+          ? nullptr
+          : fl_value_lookup_string(args, "inactive");
+  bool inactive = inactive_value != nullptr &&
+                  fl_value_get_type(inactive_value) == FL_VALUE_TYPE_BOOL &&
+                  fl_value_get_bool(inactive_value);
+  if (!inactive) {
+    present_window(self, args);
+  }
   g_autoptr(FlValue) result = fl_value_new_bool(true);
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
@@ -244,9 +281,9 @@ static FlMethodResponse* undock(WindowManagerPlugin* self) {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
 
-static FlMethodResponse* restore(WindowManagerPlugin* self) {
+static FlMethodResponse* restore(WindowManagerPlugin* self, FlValue* args) {
   gtk_window_deiconify(get_window(self));
-  gtk_window_present(get_window(self));
+  present_window(self, args);
   g_autoptr(FlValue) result = fl_value_new_bool(true);
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
@@ -920,13 +957,13 @@ static void window_manager_plugin_handle_method_call(
   } else if (g_strcmp0(method, "isPreventClose") == 0) {
     response = is_prevent_close(self);
   } else if (g_strcmp0(method, "focus") == 0) {
-    response = focus(self);
+    response = focus(self, args);
   } else if (g_strcmp0(method, "blur") == 0) {
     response = blur(self);
   } else if (g_strcmp0(method, "isFocused") == 0) {
     response = is_focused(self);
   } else if (g_strcmp0(method, "show") == 0) {
-    response = show(self);
+    response = show(self, args);
   } else if (g_strcmp0(method, "hide") == 0) {
     response = hide(self);
   } else if (g_strcmp0(method, "isVisible") == 0) {
@@ -942,7 +979,7 @@ static void window_manager_plugin_handle_method_call(
   } else if (g_strcmp0(method, "minimize") == 0) {
     response = minimize(self);
   } else if (g_strcmp0(method, "restore") == 0) {
-    response = restore(self);
+    response = restore(self, args);
   } else if (g_strcmp0(method, "isDockable") == 0) {
     response = is_dockable(self);
   } else if (g_strcmp0(method, "isDocked") == 0) {
