@@ -6,6 +6,10 @@
 #include <gdk/gdkx.h>
 #endif
 
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
+
 #define WINDOW_MANAGER_PLUGIN(obj)                                     \
   (G_TYPE_CHECK_INSTANCE_CAST((obj), window_manager_plugin_get_type(), \
                               WindowManagerPlugin))
@@ -76,8 +80,32 @@ static guint32 get_activation_timestamp(FlValue* args) {
   return static_cast<guint32>(timestamp);
 }
 
+static const gchar* get_activation_token(FlValue* args) {
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return nullptr;
+  }
+
+  FlValue* value = fl_value_lookup_string(args, "activationToken");
+  if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_STRING) {
+    return nullptr;
+  }
+
+  const gchar* token = fl_value_get_string(value);
+  return token == nullptr || *token == '\0' ? nullptr : token;
+}
+
 static void present_window(WindowManagerPlugin* self, FlValue* args) {
   GtkWindow* window = get_window(self);
+#ifdef GDK_WINDOWING_WAYLAND
+  GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(window));
+  const gchar* activation_token = get_activation_token(args);
+  if (activation_token != nullptr && GDK_IS_WAYLAND_DISPLAY(display)) {
+    gdk_wayland_display_set_startup_notification_id(display,
+                                                     activation_token);
+    gtk_window_present(window);
+    return;
+  }
+#endif
   guint32 timestamp = get_activation_timestamp(args);
   if (timestamp == GDK_CURRENT_TIME) {
     gtk_window_present(window);
@@ -190,7 +218,6 @@ static FlMethodResponse* is_focused(WindowManagerPlugin* self) {
 }
 
 static FlMethodResponse* show(WindowManagerPlugin* self, FlValue* args) {
-  gtk_widget_show(GTK_WIDGET(get_window(self)));
   FlValue* inactive_value =
       args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP
           ? nullptr
@@ -198,7 +225,9 @@ static FlMethodResponse* show(WindowManagerPlugin* self, FlValue* args) {
   bool inactive = inactive_value != nullptr &&
                   fl_value_get_type(inactive_value) == FL_VALUE_TYPE_BOOL &&
                   fl_value_get_bool(inactive_value);
-  if (!inactive) {
+  if (inactive) {
+    gtk_widget_show(GTK_WIDGET(get_window(self)));
+  } else {
     present_window(self, args);
   }
   g_autoptr(FlValue) result = fl_value_new_bool(true);

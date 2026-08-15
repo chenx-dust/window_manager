@@ -193,10 +193,16 @@ class WindowManager {
   /// [activationTimestamp] associates the request with a native user input
   /// event on Linux, allowing focus-stealing prevention to recognize a
   /// user-initiated activation.
-  Future<void> focus({int? activationTimestamp}) async {
+  /// [activationToken] carries a Wayland activation token supplied by the
+  /// compositor or desktop shell.
+  Future<void> focus({
+    int? activationTimestamp,
+    String? activationToken,
+  }) async {
     final Map<String, dynamic> arguments = {
       if (activationTimestamp != null)
         'activationTimestamp': activationTimestamp,
+      if (activationToken != null) 'activationToken': activationToken,
     };
     await _channel.invokeMethod('focus', arguments);
   }
@@ -216,15 +222,24 @@ class WindowManager {
   }
 
   /// Shows and gives focus to the window.
-  Future<void> show({bool inactive = false, int? activationTimestamp}) async {
+  Future<void> show({
+    bool inactive = false,
+    int? activationTimestamp,
+    String? activationToken,
+  }) async {
     bool isMinimized = await this.isMinimized();
     if (isMinimized) {
-      await restore(activationTimestamp: activationTimestamp);
+      await restore(
+        activationTimestamp: activationTimestamp,
+        activationToken: activationToken,
+      );
     }
     final Map<String, dynamic> arguments = {
       'inactive': inactive,
       if (activationTimestamp != null)
         'activationTimestamp': activationTimestamp,
+      if (!isMinimized && activationToken != null)
+        'activationToken': activationToken,
     };
     await _channel.invokeMethod('show', arguments);
   }
@@ -266,10 +281,14 @@ class WindowManager {
   }
 
   /// Restores the window from minimized state to its previous state.
-  Future<void> restore({int? activationTimestamp}) async {
+  Future<void> restore({
+    int? activationTimestamp,
+    String? activationToken,
+  }) async {
     final Map<String, dynamic> arguments = {
       if (activationTimestamp != null)
         'activationTimestamp': activationTimestamp,
+      if (activationToken != null) 'activationToken': activationToken,
     };
     await _channel.invokeMethod('restore', arguments);
   }

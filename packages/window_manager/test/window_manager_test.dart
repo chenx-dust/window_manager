@@ -15,6 +15,7 @@ class _RecordingListener with WindowListener {
 void main() {
   const MethodChannel channel = MethodChannel('window_manager');
   const StandardMethodCodec codec = StandardMethodCodec();
+  bool isMinimized = false;
 
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -33,11 +34,14 @@ void main() {
 
   setUp(() {
     calls = <MethodCall>[];
+    isMinimized = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
           calls.add(methodCall);
-          if (methodCall.method == 'isMinimized' ||
-              methodCall.method == 'isPositionSupported') {
+          if (methodCall.method == 'isMinimized') {
+            return isMinimized;
+          }
+          if (methodCall.method == 'isPositionSupported') {
             return false;
           }
           return true;
@@ -49,28 +53,58 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test('focus forwards a Linux activation timestamp', () async {
-    await windowManager.focus(activationTimestamp: 1234);
+  test('focus forwards Linux activation details', () async {
+    await windowManager.focus(
+      activationTimestamp: 1234,
+      activationToken: 'activation-token',
+    );
 
     expect(calls.single.method, 'focus');
-    expect(calls.single.arguments, {'activationTimestamp': 1234});
+    expect(calls.single.arguments, {
+      'activationTimestamp': 1234,
+      'activationToken': 'activation-token',
+    });
   });
 
-  test('show forwards a Linux activation timestamp', () async {
-    await windowManager.show(activationTimestamp: 1234);
+  test('show forwards Linux activation details', () async {
+    await windowManager.show(
+      activationTimestamp: 1234,
+      activationToken: 'activation-token',
+    );
 
     expect(calls.map((call) => call.method), ['isMinimized', 'show']);
     expect(calls.last.arguments, {
       'inactive': false,
       'activationTimestamp': 1234,
+      'activationToken': 'activation-token',
     });
   });
 
-  test('restore forwards a Linux activation timestamp', () async {
-    await windowManager.restore(activationTimestamp: 1234);
+  test('show consumes a Wayland activation token only once', () async {
+    isMinimized = true;
+
+    await windowManager.show(activationToken: 'activation-token');
+
+    expect(calls.map((call) => call.method), [
+      'isMinimized',
+      'restore',
+      'show',
+    ]);
+    expect(calls[1].arguments, {'activationToken': 'activation-token'});
+    expect(calls[2].arguments, {'inactive': false});
+  });
+
+  test('restore forwards Linux activation details', () async {
+    await windowManager.restore(
+      activationTimestamp: 1234,
+      activationToken: 'activation-token',
+    );
 
     expect(calls.single.method, 'restore');
-    expect(calls.single.arguments, {'activationTimestamp': 1234});
+    expect(calls.single.arguments, {
+      'activationTimestamp': 1234,
+      'activationToken': 'activation-token',
+    });
   });
 
   test('setWindowCornerPreference passes the requested rounding', () async {
