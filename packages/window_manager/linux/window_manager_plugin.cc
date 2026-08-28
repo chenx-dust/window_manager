@@ -112,56 +112,6 @@ static void present_window(WindowManagerPlugin* self, FlValue* args) {
   } else {
     gtk_window_present_with_time(window, timestamp);
   }
-static bool is_geometry_owned_by_wm(WindowManagerPlugin* self) {
-  GtkWindow* window = get_window(self);
-  if (window == nullptr)
-    return true;
-  if (gtk_window_is_maximized(window))
-    return true;
-
-  GdkWindow* gdk_window = get_gdk_window(self);
-  if (gdk_window == nullptr)
-    return false;
-
-  return gdk_window_get_state(gdk_window) & GDK_WINDOW_STATE_FULLSCREEN;
-}
-
-static void apply_saved_geometry(WindowManagerPlugin* self) {
-  GtkWindow* window = get_window(self);
-  if (window == nullptr)
-    return;
-
-  gtk_window_move(window, self->_saved_x, self->_saved_y);
-  gtk_window_resize(window, self->_saved_width, self->_saved_height);
-}
-
-static gboolean on_restore_settled(gpointer data) {
-  WindowManagerPlugin* self = WINDOW_MANAGER_PLUGIN(data);
-  self->_restore_timeout_id = 0;
-  if (self->_has_saved_geometry) {
-    apply_saved_geometry(self);
-    self->_has_saved_geometry = false;
-  }
-  return G_SOURCE_REMOVE;
-}
-
-static void correct_placement(WindowManagerPlugin* self) {
-  if (!self->_has_saved_geometry || self->_restore_timeout_id == 0)
-    return;
-  if (self->_restore_corrections >= kMaxRestoreCorrections)
-    return;
-
-  GtkWindow* window = get_window(self);
-  if (window == nullptr)
-    return;
-
-  gint x, y;
-  gtk_window_get_position(window, &x, &y);
-  if (x == self->_saved_x && y == self->_saved_y)
-    return;
-
-  self->_restore_corrections++;
-  apply_saved_geometry(self);
 }
 
 static bool is_geometry_owned_by_wm(WindowManagerPlugin* self) {
